@@ -1,0 +1,6 @@
+{
+  "name": "SecureScope — Authorized Security Assessment Platform",
+  "description": "Enterprise-grade security assessment platform featuring scope policy control, SSRF validation, multi-engine finding normalization, AI security analysis, and standards compliance reporting.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
