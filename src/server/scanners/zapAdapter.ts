@@ -29,7 +29,7 @@ export interface RawFindingOutput {
 
 export class ZapAdapter {
   public static readonly id = 'zap';
-  public static readonly name = 'OWASP ZAP';
+  public static readonly displayName = 'OWASP ZAP';
   public static readonly version = '2.14.0';
 
   public static async runScan(input: ScannerJobInput, logs: string[]): Promise<RawFindingOutput[]> {

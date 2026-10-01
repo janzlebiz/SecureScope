@@ -8,7 +8,7 @@ import { TrivyAdapter } from './trivyAdapter';
 export const SCANNER_REGISTRY: ScannerRegistryEntry[] = [
   {
     id: ZapAdapter.id,
-    name: ZapAdapter.name,
+    name: ZapAdapter.displayName,
     category: 'Web & API DAST',
     version: ZapAdapter.version,
     license: 'Apache-2.0',
@@ -21,7 +21,7 @@ export const SCANNER_REGISTRY: ScannerRegistryEntry[] = [
   },
   {
     id: NucleiAdapter.id,
-    name: NucleiAdapter.name,
+    name: NucleiAdapter.displayName,
     category: 'Template Vulnerability Scanner',
     version: NucleiAdapter.version,
     license: 'MIT',
@@ -34,7 +34,7 @@ export const SCANNER_REGISTRY: ScannerRegistryEntry[] = [
   },
   {
     id: MobSFAdapter.id,
-    name: MobSFAdapter.name,
+    name: MobSFAdapter.displayName,
     category: 'Mobile Security (Android & iOS)',
     version: MobSFAdapter.version,
     license: 'GPL-3.0',
@@ -47,7 +47,7 @@ export const SCANNER_REGISTRY: ScannerRegistryEntry[] = [
   },
   {
     id: SemgrepAdapter.id,
-    name: SemgrepAdapter.name,
+    name: SemgrepAdapter.displayName,
     category: 'Static Application Security Testing (SAST)',
     version: SemgrepAdapter.version,
     license: 'LGPL-2.1',
@@ -60,7 +60,7 @@ export const SCANNER_REGISTRY: ScannerRegistryEntry[] = [
   },
   {
     id: TrivyAdapter.id,
-    name: TrivyAdapter.name,
+    name: TrivyAdapter.displayName,
     category: 'Software Composition & Secrets (SCA)',
     version: TrivyAdapter.version,
     license: 'Apache-2.0',

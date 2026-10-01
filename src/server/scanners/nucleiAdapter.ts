@@ -3,7 +3,7 @@ import { RawFindingOutput } from './zapAdapter';
 
 export class NucleiAdapter {
   public static readonly id = 'nuclei';
-  public static readonly name = 'ProjectDiscovery Nuclei';
+  public static readonly displayName = 'ProjectDiscovery Nuclei';
   public static readonly version = 'v3.2.1 (Templates: v9.8.4)';
 
   public static async runScan(input: { asset: Asset; profile: ScanProfile }, logs: string[]): Promise<RawFindingOutput[]> {

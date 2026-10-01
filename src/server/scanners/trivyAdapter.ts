@@ -3,7 +3,7 @@ import { RawFindingOutput } from './zapAdapter';
 
 export class TrivyAdapter {
   public static readonly id = 'trivy';
-  public static readonly name = 'Aqua Security Trivy';
+  public static readonly displayName = 'Aqua Security Trivy';
   public static readonly version = 'v0.50.1';
 
   public static async runScan(input: { asset: Asset; profile: ScanProfile }, logs: string[]): Promise<RawFindingOutput[]> {

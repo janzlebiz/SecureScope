@@ -3,7 +3,7 @@ import { RawFindingOutput } from './zapAdapter';
 
 export class MobSFAdapter {
   public static readonly id = 'mobsf';
-  public static readonly name = 'OWASP MobSF (Mobile Security Framework)';
+  public static readonly displayName = 'OWASP MobSF (Mobile Security Framework)';
   public static readonly version = 'v3.8.0';
 
   public static async runScan(input: { asset: Asset; profile: ScanProfile }, logs: string[]): Promise<RawFindingOutput[]> {

@@ -23,6 +23,7 @@ export interface User {
   email: string;
   role: UserRole;
   avatarUrl?: string;
+  passwordHash?: string;
 }
 
 export interface ScopePolicy {

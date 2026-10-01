@@ -3,7 +3,7 @@ import { RawFindingOutput } from './zapAdapter';
 
 export class SemgrepAdapter {
   public static readonly id = 'semgrep';
-  public static readonly name = 'Semgrep SAST';
+  public static readonly displayName = 'Semgrep SAST';
   public static readonly version = 'v1.68.0';
 
   public static async runScan(input: { asset: Asset; profile: ScanProfile }, logs: string[]): Promise<RawFindingOutput[]> {

@@ -6,9 +6,10 @@ interface ReportsViewProps {
   scans: Scan[];
   projects: Project[];
   findings: Finding[];
+  activeToken: string;
 }
 
-export const ReportsView: React.FC<ReportsViewProps> = ({ scans, projects, findings }) => {
+export const ReportsView: React.FC<ReportsViewProps> = ({ scans, projects, findings, activeToken }) => {
   const [selectedScanId, setSelectedScanId] = useState<string>(scans[0]?.id || '');
   const [reportFormat, setReportFormat] = useState<'HTML' | 'JSON' | 'CSV'>('HTML');
 
@@ -18,12 +19,11 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ scans, projects, findi
   const handleExport = () => {
     if (!selectedScanId) return;
 
+    const url = `/api/reports/generate?scanId=${selectedScanId}&format=${reportFormat}&token=${activeToken}`;
     if (reportFormat === 'HTML') {
-      window.open(`/api/reports/generate?scanId=${selectedScanId}&format=HTML`, '_blank');
-    } else if (reportFormat === 'CSV') {
-      window.location.href = `/api/reports/generate?scanId=${selectedScanId}&format=CSV`;
+      window.open(url, '_blank');
     } else {
-      window.location.href = `/api/reports/generate?scanId=${selectedScanId}&format=JSON`;
+      window.location.href = url;
     }
   };
 

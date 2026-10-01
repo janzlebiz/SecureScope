@@ -1,8 +1,9 @@
+import crypto from 'crypto';
 import { Finding, FindingSeverity, FindingConfidence, FindingOccurrence } from '../../types/securescope';
 
 export class NormalizerAndCorrelator {
   /**
-   * Generates a deterministic fingerprint for deduplication across scanners
+   * Generates a deterministic cryptographic fingerprint (SHA-256) for deduplication across scanners
    */
   public static generateFingerprint(
     assetIdentifier: string,
@@ -19,14 +20,8 @@ export class NormalizerAndCorrelator {
       title.toLowerCase().trim()
     ].join('||');
 
-    // Simple deterministic numeric hash string
-    let hash = 0;
-    for (let i = 0; i < rawKey.length; i++) {
-      const char = rawKey.charCodeAt(i);
-      hash = (hash << 5) - hash + char;
-      hash |= 0;
-    }
-    return `fp-${Math.abs(hash).toString(16)}`;
+    const hash = crypto.createHash('sha256').update(rawKey).digest('hex');
+    return `fp-${hash.slice(0, 16)}`;
   }
 
   /**
@@ -63,21 +58,45 @@ export class NormalizerAndCorrelator {
     const now = new Date().toISOString();
 
     for (const raw of rawList) {
+      // SS-05: Validation on raw findings to prevent pipeline crashes
+      if (!raw || typeof raw !== 'object') {
+        console.warn('[Normalizer] Skipped invalid null or malformed finding object.');
+        continue;
+      }
+
+      const missingFields = [];
+      if (!raw.title || typeof raw.title !== 'string') missingFields.push('title');
+      if (!raw.affectedLocation || typeof raw.affectedLocation !== 'string') missingFields.push('affectedLocation');
+      if (!raw.severity || typeof raw.severity !== 'string') missingFields.push('severity');
+      if (!raw.category || typeof raw.category !== 'string') missingFields.push('category');
+
+      if (missingFields.length > 0) {
+        console.warn(`[Normalizer] Skipped malformed raw finding due to missing/invalid fields: ${missingFields.join(', ')}`);
+        continue;
+      }
+
+      // Safe bounds checks
+      const title = raw.title.slice(0, 200);
+      const affectedLocation = raw.affectedLocation.slice(0, 500);
+      const severity = (['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO'].includes(raw.severity)
+        ? raw.severity
+        : 'INFO') as FindingSeverity;
+
       const fp = this.generateFingerprint(
         assetIdentifier,
         raw.cwe,
         raw.category,
-        raw.affectedLocation,
-        raw.title
+        affectedLocation,
+        title
       );
 
       const occurrence: FindingOccurrence = {
         scannerId: raw.scannerId,
         scannerName: raw.scannerName,
         scannerVersion: raw.scannerVersion,
-        rawFindingId: raw.rawFindingId,
+        rawFindingId: raw.rawFindingId || 'raw-unk',
         detectedAt: now,
-        evidence: raw.evidence
+        evidence: raw.evidence || {}
       };
 
       if (findingMap.has(fp)) {
@@ -93,8 +112,8 @@ export class NormalizerAndCorrelator {
           LOW: 2,
           INFO: 1
         };
-        if (severityRank[raw.severity] > severityRank[existing.severity]) {
-          existing.severity = raw.severity;
+        if (severityRank[severity] > severityRank[existing.severity]) {
+          existing.severity = severity;
         }
 
         // Upgrade confidence if verified
@@ -103,7 +122,9 @@ export class NormalizerAndCorrelator {
         }
 
         // Merge references
-        existing.references = Array.from(new Set([...existing.references, ...raw.references]));
+        if (Array.isArray(raw.references)) {
+          existing.references = Array.from(new Set([...existing.references, ...raw.references]));
+        }
 
         // Augment standards mapping if missing
         if (!existing.cwe && raw.cwe) existing.cwe = raw.cwe;
@@ -115,16 +136,16 @@ export class NormalizerAndCorrelator {
 
       } else {
         const newFinding: Finding = {
-          id: `fnd-${Math.random().toString(36).substring(2, 9)}`,
+          id: `fnd-${crypto.randomBytes(4).toString('hex')}`,
           fingerprint: fp,
           scanId,
           projectId,
           assetId,
           assetIdentifier,
-          title: raw.title,
-          description: raw.description,
-          severity: raw.severity,
-          confidence: raw.confidence,
+          title,
+          description: raw.description || 'No description provided.',
+          severity,
+          confidence: (['VERIFIED', 'HIGH', 'MEDIUM', 'LOW'].includes(raw.confidence) ? raw.confidence : 'LOW') as FindingConfidence,
           category: raw.category,
           status: 'OPEN',
           cwe: raw.cwe,
@@ -133,9 +154,9 @@ export class NormalizerAndCorrelator {
           owaspTop10: raw.owaspTop10,
           owaspWstg: raw.owaspWstg,
           owaspMasvs: raw.owaspMasvs,
-          affectedLocation: raw.affectedLocation,
-          remediation: raw.remediation,
-          references: raw.references,
+          affectedLocation,
+          remediation: raw.remediation || 'Remediation details not provided.',
+          references: Array.isArray(raw.references) ? raw.references : [],
           occurrences: [occurrence],
           firstSeen: now,
           lastSeen: now

@@ -10,6 +10,7 @@ import { AiAdvisorView } from './components/AiAdvisorView';
 import { StandardsView } from './components/StandardsView';
 import { ReportsView } from './components/ReportsView';
 import { AuditView } from './components/AuditView';
+import { ShieldAlert } from 'lucide-react';
 import {
   Project,
   Asset,
@@ -25,6 +26,7 @@ import {
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<ViewTab>('dashboard');
+  const [activeRole, setActiveRole] = useState<'owner' | 'admin' | 'analyst' | 'viewer'>('owner');
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
@@ -37,68 +39,116 @@ export default function App() {
   const [selectedFinding, setSelectedFinding] = useState<Finding | null>(null);
   const [preSelectedAssetForScan, setPreSelectedAssetForScan] = useState<Asset | null>(null);
 
-  // Fetch initial state
+  // Error toast or status message if action gets denied by backend RBAC/IDOR (SS-01)
+  const [denialError, setDenialError] = useState<string | null>(null);
+
+  const activeToken = `token-${activeRole}`;
+
+  // Custom authenticated fetch wrapper (SS-01)
+  const authFetch = async (url: string, options: any = {}) => {
+    const headers = {
+      ...(options.headers || {}),
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${activeToken}`
+    };
+    const res = await fetch(url, { ...options, headers });
+    
+    if (res.status === 403) {
+      const errBody = await res.json().catch(() => ({}));
+      triggerDenialToast(errBody.error || 'Access Denied: Role permissions violated.');
+    } else if (res.status === 401) {
+      triggerDenialToast('Session expired or unauthorized request.');
+    }
+    
+    return res;
+  };
+
+  const triggerDenialToast = (msg: string) => {
+    setDenialError(msg);
+    setTimeout(() => setDenialError(null), 5000);
+  };
+
+  // Fetch state scoped to the active authorized identity (IDOR & RBAC)
   const fetchData = async () => {
     try {
-      const [projRes, scanRes, findRes, auditRes, regRes] = await Promise.all([
-        fetch('/api/projects'),
-        fetch('/api/scans'),
-        fetch('/api/findings'),
-        fetch('/api/audit-logs'),
-        fetch('/api/scanners/registry')
-      ]);
-
+      const projRes = await authFetch('/api/projects');
+      if (!projRes.ok) return;
       const projData = await projRes.json();
-      const scanData = await scanRes.json();
-      const findData = await findRes.json();
-      const auditData = await auditRes.json();
-      const regData = await regRes.json();
-
       setProjects(projData);
-      if (!selectedProject && projData.length > 0) {
-        setSelectedProject(projData[0]);
-      }
-      setScans(scanData);
-      setFindings(findData);
-      setAuditLogs(auditData);
-      setScanners(regData);
 
+      // Auto-set or sync selected project based on authorized projects list
+      let nextProject = selectedProject;
       if (projData.length > 0) {
-        const assetsRes = await fetch(`/api/projects/${projData[0].id}/assets`);
-        const assetsData = await assetsRes.json();
-        setAssets(assetsData);
+        const stillAuthorized = projData.some((p: Project) => p.id === selectedProject?.id);
+        if (!stillAuthorized || !selectedProject) {
+          nextProject = projData[0];
+          setSelectedProject(projData[0]);
+        }
+      } else {
+        nextProject = null;
+        setSelectedProject(null);
+      }
+
+      const scanRes = await authFetch('/api/scans');
+      const findRes = await authFetch('/api/findings');
+      const regRes = await authFetch('/api/scanners/registry');
+
+      if (scanRes.ok) setScans(await scanRes.json());
+      if (findRes.ok) setFindings(await findRes.json());
+      if (regRes.ok) setScanners(await regRes.json());
+
+      // Fetch audit logs (restricted endpoint; handles 403 internally)
+      const auditRes = await authFetch('/api/audit-logs');
+      if (auditRes.ok) {
+        setAuditLogs(await auditRes.json());
+      } else {
+        setAuditLogs([]);
+      }
+
+      if (nextProject) {
+        const assetsRes = await authFetch(`/api/projects/${nextProject.id}/assets`);
+        if (assetsRes.ok) {
+          setAssets(await assetsRes.json());
+        }
+      } else {
+        setAssets([]);
       }
     } catch (err) {
       console.error('Failed to fetch SecureScope state:', err);
     }
   };
 
+  // Fetch initial/periodic state
   useEffect(() => {
     fetchData();
     const interval = setInterval(fetchData, 4000);
     return () => clearInterval(interval);
-  }, []);
+  }, [activeRole, selectedProject?.id]);
 
   // Sync assets when selected project changes
   useEffect(() => {
     if (selectedProject) {
-      fetch(`/api/projects/${selectedProject.id}/assets`)
-        .then((res) => res.json())
+      authFetch(`/api/projects/${selectedProject.id}/assets`)
+        .then((res) => {
+          if (res.ok) return res.json();
+          return [];
+        })
         .then((data) => setAssets(data))
         .catch((err) => console.error('Failed to load assets:', err));
     }
-  }, [selectedProject]);
+  }, [selectedProject, activeRole]);
 
   // Handlers
   const handleCreateProject = async (name: string, description: string) => {
-    const res = await fetch('/api/projects', {
+    const res = await authFetch('/api/projects', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, description })
     });
-    const newProj = await res.json();
-    setProjects((prev) => [newProj, ...prev]);
-    setSelectedProject(newProj);
+    if (res.ok) {
+      const newProj = await res.json();
+      setProjects((prev) => [newProj, ...prev]);
+      setSelectedProject(newProj);
+    }
   };
 
   const handleAddAsset = async (assetData: {
@@ -109,13 +159,14 @@ export default function App() {
     environment: Environment;
     criticality: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
   }) => {
-    const res = await fetch(`/api/projects/${assetData.projectId}/assets`, {
+    const res = await authFetch(`/api/projects/${assetData.projectId}/assets`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(assetData)
     });
-    const newAsset = await res.json();
-    setAssets((prev) => [newAsset, ...prev]);
+    if (res.ok) {
+      const newAsset = await res.json();
+      setAssets((prev) => [newAsset, ...prev]);
+    }
   };
 
   const handleLaunchScan = async (params: {
@@ -125,9 +176,8 @@ export default function App() {
     authorizationConfirmed: boolean;
     authorizationStatement: string;
   }) => {
-    const res = await fetch('/api/scans', {
+    const res = await authFetch('/api/scans', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params)
     });
 
@@ -139,51 +189,69 @@ export default function App() {
   };
 
   const handleCancelScan = async (scanId: string) => {
-    await fetch(`/api/scans/${scanId}/cancel`, { method: 'POST' });
-    fetchData();
+    const res = await authFetch(`/api/scans/${scanId}/cancel`, { method: 'POST' });
+    if (res.ok) {
+      fetchData();
+    }
   };
 
   const handleUpdateFindingStatus = async (id: string, status: FindingStatus) => {
-    const res = await fetch(`/api/findings/${id}`, {
+    const res = await authFetch(`/api/findings/${id}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status })
     });
-    const updated = await res.json();
-    setFindings((prev) => prev.map((f) => (f.id === id ? updated : f)));
-    if (selectedFinding?.id === id) {
-      setSelectedFinding(updated);
+    if (res.ok) {
+      const updated = await res.json();
+      setFindings((prev) => prev.map((f) => (f.id === id ? updated : f)));
+      if (selectedFinding?.id === id) {
+        setSelectedFinding(updated);
+      }
     }
   };
 
   const handleAnalyzeFindingWithAi = async (findingId: string) => {
-    const res = await fetch('/api/ai/analyze-finding', {
+    const res = await authFetch('/api/ai/analyze-finding', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ findingId })
     });
-    const aiData = await res.json();
-    setFindings((prev) =>
-      prev.map((f) => (f.id === findingId ? { ...f, aiAnalysis: aiData } : f))
-    );
-    if (selectedFinding?.id === findingId) {
-      setSelectedFinding((prev) => (prev ? { ...prev, aiAnalysis: aiData } : null));
+    if (res.ok) {
+      const aiData = await res.json();
+      setFindings((prev) =>
+        prev.map((f) => (f.id === findingId ? { ...f, aiAnalysis: aiData } : f))
+      );
+      if (selectedFinding?.id === findingId) {
+        setSelectedFinding((prev) => (prev ? { ...prev, aiAnalysis: aiData } : null));
+      }
+      return aiData;
     }
-    return aiData;
+    return null;
   };
 
   const handleGenerateExecutiveSummaryWithAi = async (scanId: string) => {
-    const res = await fetch('/api/ai/generate-executive-summary', {
+    const res = await authFetch('/api/ai/generate-executive-summary', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ scanId })
     });
-    const data = await res.json();
-    return data.summary;
+    if (res.ok) {
+      const data = await res.json();
+      return data.summary;
+    }
+    return 'Summary generation failed due to authorization limits.';
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-sky-500/30 selection:text-sky-200">
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-sky-500/30 selection:text-sky-200 relative">
+      {/* Denial Notification Overlay (SS-01 AAA demo indicator) */}
+      {denialError && (
+        <div className="fixed top-20 right-6 z-50 max-w-sm bg-red-950/90 border border-red-500/40 rounded-xl p-4 shadow-lg shadow-red-950/50 flex items-start gap-3 backdrop-blur-md animate-in fade-in slide-in-from-top-4 duration-300">
+          <ShieldAlert className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+          <div>
+            <h4 className="text-xs font-bold text-red-200 uppercase tracking-wide font-mono">Enforcement Block</h4>
+            <p className="text-[11px] text-red-300 mt-1">{denialError}</p>
+          </div>
+        </div>
+      )}
+
       {/* Top Header */}
       <Header
         projects={projects}
@@ -191,6 +259,8 @@ export default function App() {
         onSelectProject={setSelectedProject}
         onOpenNewScan={() => setActiveTab('orchestrator')}
         onOpenNewProject={() => setActiveTab('projects')}
+        activeRole={activeRole}
+        onSelectRole={setActiveRole}
       />
 
       <div className="flex flex-1 overflow-hidden">
@@ -262,7 +332,7 @@ export default function App() {
           )}
 
           {activeTab === 'reports' && (
-            <ReportsView scans={scans} projects={projects} findings={findings} />
+            <ReportsView scans={scans} projects={projects} findings={findings} activeToken={activeToken} />
           )}
 
           {activeTab === 'audit' && (
