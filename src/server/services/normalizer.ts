@@ -21,7 +21,7 @@ export class NormalizerAndCorrelator {
     ].join('||');
 
     const hash = crypto.createHash('sha256').update(rawKey).digest('hex');
-    return `fp-${hash.slice(0, 16)}`;
+    return `fp-${hash}`;
   }
 
   /**

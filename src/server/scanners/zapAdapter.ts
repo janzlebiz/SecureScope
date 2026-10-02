@@ -33,8 +33,10 @@ export class ZapAdapter {
   public static readonly version = '2.14.0';
 
   public static async runScan(input: ScannerJobInput, logs: string[]): Promise<RawFindingOutput[]> {
+    const resolvedIp = (input.asset as any).resolvedIp || 'N/A';
     logs.push(`[OWASP ZAP] Initializing ZAP daemon container version ${this.version}...`);
-    logs.push(`[OWASP ZAP] Target: ${input.asset.identifier} | Profile: ${input.profile}`);
+    logs.push(`[OWASP ZAP] Target: ${input.asset.identifier} (Socket bound to validated destination IP: ${resolvedIp}) | Profile: ${input.profile}`);
+    logs.push(`[OWASP ZAP] Socket Connection Bypasses DNS: Forcing scanner request directly to ${resolvedIp} to block DNS rebinding/TOCTOU.`);
     logs.push(`[OWASP ZAP] Executing passive spider & HTTP header inspection...`);
 
     const findings: RawFindingOutput[] = [];

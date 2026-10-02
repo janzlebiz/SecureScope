@@ -31,12 +31,6 @@ app.use(express.json({ limit: '10mb' }));
 // --- SESSION STORE & ACTIVE SESSIONS (SS-01) ---
 const SESSIONS = new Map<string, string>(); // SessionToken -> UserID
 
-// Pre-seeded Session Tokens for immediate demo load and easy local verification
-SESSIONS.set('token-owner', 'usr-owner-1');
-SESSIONS.set('token-admin', 'usr-admin-1');
-SESSIONS.set('token-analyst', 'usr-analyst-1');
-SESSIONS.set('token-viewer', 'usr-viewer-1');
-
 // --- AUTHENTICATION & ACCESS CONTROL MIDDLEWARE (SS-01) ---
 function requireAuth(req: any, res: any, next: any) {
   const authHeader = req.headers.authorization;
@@ -384,15 +378,20 @@ app.post('/api/scans', requireAuth, requireRole(['OWNER', 'ADMIN', 'ANALYST']), 
     // Respond immediately to the client
     res.status(202).json(newScan);
 
+    const boundIp = (decision.ipAddressesResolved && decision.ipAddressesResolved.length > 0)
+      ? decision.ipAddressesResolved[0]
+      : '127.0.0.1';
+    const boundAsset = { ...asset, resolvedIp: boundIp } as any;
+
     // Run background scans and append findings safely
     (async () => {
       const rawFindings: RawFindingOutput[] = [];
 
       try {
-        if (asset.type === 'WEB_URL' || asset.type === 'API_ENDPOINT') {
+        if (boundAsset.type === 'WEB_URL' || boundAsset.type === 'API_ENDPOINT') {
           // ZAP Adapter Run
           const zapLogs: string[] = [];
-          const zapRaw = await ZapAdapter.runScan({ scanId, projectId: project.id, asset, profile: validatedData.profile, authorizationStatement: newScan.authorizationStatement }, zapLogs);
+          const zapRaw = await ZapAdapter.runScan({ scanId, projectId: project.id, asset: boundAsset, profile: validatedData.profile, authorizationStatement: newScan.authorizationStatement }, zapLogs);
           rawFindings.push(...zapRaw);
           newScan.jobs.push({
             id: `job-zap-${scanId}`,
@@ -408,7 +407,7 @@ app.post('/api/scans', requireAuth, requireRole(['OWNER', 'ADMIN', 'ANALYST']), 
 
           // Nuclei Adapter Run
           const nucleiLogs: string[] = [];
-          const nucleiRaw = await NucleiAdapter.runScan({ asset, profile: validatedData.profile }, nucleiLogs);
+          const nucleiRaw = await NucleiAdapter.runScan({ asset: boundAsset, profile: validatedData.profile }, nucleiLogs);
           rawFindings.push(...nucleiRaw);
           newScan.jobs.push({
             id: `job-nuclei-${scanId}`,
@@ -421,9 +420,9 @@ app.post('/api/scans', requireAuth, requireRole(['OWNER', 'ADMIN', 'ANALYST']), 
             findingsCount: nucleiRaw.length,
             logs: nucleiLogs
           });
-        } else if (asset.type === 'MOBILE_PACKAGE') {
+        } else if (boundAsset.type === 'MOBILE_PACKAGE') {
           const mobsfLogs: string[] = [];
-          const mobsfRaw = await MobSFAdapter.runScan({ asset, profile: validatedData.profile }, mobsfLogs);
+          const mobsfRaw = await MobSFAdapter.runScan({ asset: boundAsset, profile: validatedData.profile }, mobsfLogs);
           rawFindings.push(...mobsfRaw);
           newScan.jobs.push({
             id: `job-mobsf-${scanId}`,
@@ -436,9 +435,9 @@ app.post('/api/scans', requireAuth, requireRole(['OWNER', 'ADMIN', 'ANALYST']), 
             findingsCount: mobsfRaw.length,
             logs: mobsfLogs
           });
-        } else if (asset.type === 'SOURCE_REPO') {
+        } else if (boundAsset.type === 'SOURCE_REPO') {
           const semgrepLogs: string[] = [];
-          const semgrepRaw = await SemgrepAdapter.runScan({ asset, profile: validatedData.profile }, semgrepLogs);
+          const semgrepRaw = await SemgrepAdapter.runScan({ asset: boundAsset, profile: validatedData.profile }, semgrepLogs);
           rawFindings.push(...semgrepRaw);
           newScan.jobs.push({
             id: `job-semgrep-${scanId}`,
@@ -453,7 +452,7 @@ app.post('/api/scans', requireAuth, requireRole(['OWNER', 'ADMIN', 'ANALYST']), 
           });
 
           const trivyLogs: string[] = [];
-          const trivyRaw = await TrivyAdapter.runScan({ asset, profile: validatedData.profile }, trivyLogs);
+          const trivyRaw = await TrivyAdapter.runScan({ asset: boundAsset, profile: validatedData.profile }, trivyLogs);
           rawFindings.push(...trivyRaw);
           newScan.jobs.push({
             id: `job-trivy-${scanId}`,

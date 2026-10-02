@@ -27,6 +27,7 @@ import {
 export default function App() {
   const [activeTab, setActiveTab] = useState<ViewTab>('dashboard');
   const [activeRole, setActiveRole] = useState<'owner' | 'admin' | 'analyst' | 'viewer'>('owner');
+  const [tokens, setTokens] = useState<Record<string, string>>({});
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
@@ -42,10 +43,43 @@ export default function App() {
   // Error toast or status message if action gets denied by backend RBAC/IDOR (SS-01)
   const [denialError, setDenialError] = useState<string | null>(null);
 
-  const activeToken = `token-${activeRole}`;
+  const activeToken = tokens[activeRole] || '';
+
+  // Dynamic production session initialization (SS-01)
+  useEffect(() => {
+    const fetchToken = async () => {
+      if (tokens[activeRole]) return;
+
+      let email = 'alex.mercer@acme-fintech.com';
+      if (activeRole === 'admin') email = 'sarah.chen@medicare-cloud.org';
+      if (activeRole === 'analyst') email = 'analyst@secure.com';
+      if (activeRole === 'viewer') email = 'viewer@secure.com';
+
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password: 'Password123!' })
+        });
+        if (res.ok) {
+          const body = await res.json();
+          setTokens(prev => ({ ...prev, [activeRole]: body.token }));
+        }
+      } catch (err) {
+        console.error('[Dynamic Login] Failed:', err);
+      }
+    };
+
+    fetchToken();
+  }, [activeRole]);
 
   // Custom authenticated fetch wrapper (SS-01)
   const authFetch = async (url: string, options: any = {}) => {
+    if (!activeToken) {
+      // Return a simulated failing promise or wait until token is fetched
+      return new Response(JSON.stringify({ error: 'Session initializing...' }), { status: 401 });
+    }
+
     const headers = {
       ...(options.headers || {}),
       'Content-Type': 'application/json',
@@ -70,6 +104,7 @@ export default function App() {
 
   // Fetch state scoped to the active authorized identity (IDOR & RBAC)
   const fetchData = async () => {
+    if (!activeToken) return;
     try {
       const projRes = await authFetch('/api/projects');
       if (!projRes.ok) return;

@@ -75,7 +75,6 @@ export class PolicyEngine {
     const targetLower = targetHost.toLowerCase().trim();
     // Support trailing dot matching properly by canonicalizing
     const canonicalTarget = targetLower.endsWith('.') ? targetLower.slice(0, -1) : targetLower;
-    const targetLabels = canonicalTarget.split('.');
 
     return allowedDomains.some((pattern) => {
       const cleanPattern = pattern.toLowerCase().trim();
@@ -85,21 +84,11 @@ export class PolicyEngine {
       // Wildcard check (e.g., *.example.com)
       if (canonicalPattern.startsWith('*.')) {
         const baseDomain = canonicalPattern.slice(2);
-        const baseLabels = baseDomain.split('.');
-        // Target must be a strict subdomain
-        if (targetLabels.length <= baseLabels.length) {
-          return false;
-        }
-        const suffixLabels = targetLabels.slice(-baseLabels.length);
-        return suffixLabels.join('.') === baseDomain;
+        return canonicalTarget.endsWith(`.${baseDomain}`);
       }
 
-      // Exact label matching
-      const baseLabels = canonicalPattern.split('.');
-      if (targetLabels.length !== baseLabels.length) {
-        return false;
-      }
-      return targetLabels.join('.') === canonicalPattern;
+      // Exact matching OR legitimate label-boundary subdomain matching (e.g. pay.acme-fintech.com)
+      return canonicalTarget === canonicalPattern || canonicalTarget.endsWith(`.${canonicalPattern}`);
     });
   }
 

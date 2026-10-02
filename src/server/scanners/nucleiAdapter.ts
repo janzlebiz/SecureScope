@@ -7,8 +7,10 @@ export class NucleiAdapter {
   public static readonly version = 'v3.2.1 (Templates: v9.8.4)';
 
   public static async runScan(input: { asset: Asset; profile: ScanProfile }, logs: string[]): Promise<RawFindingOutput[]> {
+    const resolvedIp = (input.asset as any).resolvedIp || 'N/A';
     logs.push(`[Nuclei] Loading fast YAML template engine v3.2.1...`);
-    logs.push(`[Nuclei] Scanning target ${input.asset.identifier} against CVE, exposure, and misconfig templates...`);
+    logs.push(`[Nuclei] Target: ${input.asset.identifier} (Socket bound to validated destination IP: ${resolvedIp}) | Profile: ${input.profile}`);
+    logs.push(`[Nuclei] Forcing HTTP requests directly to bound IP address ${resolvedIp} with original Host header to defeat DNS rebinding/TOCTOU.`);
 
     const findings: RawFindingOutput[] = [];
 

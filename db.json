@@ -56,6 +56,26 @@
   ],
   "assets": [
     {
+      "id": "ast-2f65a9de",
+      "projectId": "proj-fintech-core",
+      "type": "WEB_URL",
+      "name": "Internal Server Target",
+      "identifier": "http://127.0.0.1:8000",
+      "environment": "DEVELOPMENT",
+      "criticality": "LOW",
+      "createdAt": "2026-10-01T23:10:18.356Z"
+    },
+    {
+      "id": "ast-b5213f2d",
+      "projectId": "proj-fintech-core",
+      "type": "WEB_URL",
+      "name": "Internal Server Target",
+      "identifier": "http://127.0.0.1:8000",
+      "environment": "DEVELOPMENT",
+      "criticality": "LOW",
+      "createdAt": "2026-10-01T23:09:50.749Z"
+    },
+    {
       "id": "ast-fintech-web",
       "projectId": "proj-fintech-core",
       "type": "WEB_URL",
@@ -283,6 +303,146 @@
     }
   ],
   "auditLogs": [
+    {
+      "id": "aud-a7df159e",
+      "actorName": "Alex Mercer",
+      "actorEmail": "alex.mercer@acme-fintech.com",
+      "action": "AUTHENTICATION_SUCCESS",
+      "resourceType": "USER",
+      "resourceId": "usr-owner-1",
+      "details": "Successfully logged into control plane.",
+      "timestamp": "2026-10-01T23:10:18.366Z"
+    },
+    {
+      "id": "aud-03ba6f28",
+      "actorName": "Alex Mercer",
+      "actorEmail": "alex.mercer@acme-fintech.com",
+      "action": "SCAN_BLOCKED_BY_POLICY",
+      "resourceType": "ASSET",
+      "resourceId": "ast-2f65a9de",
+      "details": "Scan attempt blocked by scope enforcement reasons: [Target domain '127.0.0.1' is not listed in project allowed domains [pay.acme-fintech.internal, api.acme-fintech.com, com.acmecorp.merchant].]",
+      "timestamp": "2026-10-01T23:10:18.360Z"
+    },
+    {
+      "id": "aud-073e8a6c",
+      "actorName": "Alex Mercer",
+      "actorEmail": "alex.mercer@acme-fintech.com",
+      "action": "ASSET_ADDED",
+      "resourceType": "ASSET",
+      "resourceId": "ast-2f65a9de",
+      "details": "Added target asset 'Internal Server Target' (http://127.0.0.1:8000)",
+      "timestamp": "2026-10-01T23:10:18.357Z"
+    },
+    {
+      "id": "aud-efae1991",
+      "actorName": "Alex Mercer",
+      "actorEmail": "alex.mercer@acme-fintech.com",
+      "action": "AUTHENTICATION_SUCCESS",
+      "resourceType": "USER",
+      "resourceId": "usr-owner-1",
+      "details": "Successfully logged into control plane.",
+      "timestamp": "2026-10-01T23:10:18.351Z"
+    },
+    {
+      "id": "aud-6989dfb5",
+      "actorName": "Jane Doe",
+      "actorEmail": "viewer@secure.com",
+      "action": "AUTHENTICATION_SUCCESS",
+      "resourceType": "USER",
+      "resourceId": "usr-viewer-1",
+      "details": "Successfully logged into control plane.",
+      "timestamp": "2026-10-01T23:10:18.330Z"
+    },
+    {
+      "id": "aud-881c6773",
+      "actorName": "Sarah Chen",
+      "actorEmail": "sarah.chen@medicare-cloud.org",
+      "action": "AUTHENTICATION_SUCCESS",
+      "resourceType": "USER",
+      "resourceId": "usr-admin-1",
+      "details": "Successfully logged into control plane.",
+      "timestamp": "2026-10-01T23:10:18.322Z"
+    },
+    {
+      "id": "aud-8ce615c8",
+      "actorName": "Alex Mercer",
+      "actorEmail": "alex.mercer@acme-fintech.com",
+      "action": "AUTHENTICATION_SUCCESS",
+      "resourceType": "USER",
+      "resourceId": "usr-owner-1",
+      "details": "Successfully logged into control plane.",
+      "timestamp": "2026-10-01T23:10:18.313Z"
+    },
+    {
+      "id": "aud-3dde905b",
+      "actorName": "Alex Mercer",
+      "actorEmail": "alex.mercer@acme-fintech.com",
+      "action": "AUTHENTICATION_SUCCESS",
+      "resourceType": "USER",
+      "resourceId": "usr-owner-1",
+      "details": "Successfully logged into control plane.",
+      "timestamp": "2026-10-01T23:09:50.766Z"
+    },
+    {
+      "id": "aud-793901a6",
+      "actorName": "Alex Mercer",
+      "actorEmail": "alex.mercer@acme-fintech.com",
+      "action": "SCAN_BLOCKED_BY_POLICY",
+      "resourceType": "ASSET",
+      "resourceId": "ast-b5213f2d",
+      "details": "Scan attempt blocked by scope enforcement reasons: [Target domain '127.0.0.1' is not listed in project allowed domains [pay.acme-fintech.internal, api.acme-fintech.com, com.acmecorp.merchant].]",
+      "timestamp": "2026-10-01T23:09:50.757Z"
+    },
+    {
+      "id": "aud-9f6070ed",
+      "actorName": "Alex Mercer",
+      "actorEmail": "alex.mercer@acme-fintech.com",
+      "action": "ASSET_ADDED",
+      "resourceType": "ASSET",
+      "resourceId": "ast-b5213f2d",
+      "details": "Added target asset 'Internal Server Target' (http://127.0.0.1:8000)",
+      "timestamp": "2026-10-01T23:09:50.750Z"
+    },
+    {
+      "id": "aud-e9070d6d",
+      "actorName": "Alex Mercer",
+      "actorEmail": "alex.mercer@acme-fintech.com",
+      "action": "AUTHENTICATION_SUCCESS",
+      "resourceType": "USER",
+      "resourceId": "usr-owner-1",
+      "details": "Successfully logged into control plane.",
+      "timestamp": "2026-10-01T23:09:50.698Z"
+    },
+    {
+      "id": "aud-180a6434",
+      "actorName": "Jane Doe",
+      "actorEmail": "viewer@secure.com",
+      "action": "AUTHENTICATION_SUCCESS",
+      "resourceType": "USER",
+      "resourceId": "usr-viewer-1",
+      "details": "Successfully logged into control plane.",
+      "timestamp": "2026-10-01T23:09:50.677Z"
+    },
+    {
+      "id": "aud-87dbec24",
+      "actorName": "Sarah Chen",
+      "actorEmail": "sarah.chen@medicare-cloud.org",
+      "action": "AUTHENTICATION_SUCCESS",
+      "resourceType": "USER",
+      "resourceId": "usr-admin-1",
+      "details": "Successfully logged into control plane.",
+      "timestamp": "2026-10-01T23:09:50.668Z"
+    },
+    {
+      "id": "aud-0d27dc8d",
+      "actorName": "Alex Mercer",
+      "actorEmail": "alex.mercer@acme-fintech.com",
+      "action": "AUTHENTICATION_SUCCESS",
+      "resourceType": "USER",
+      "resourceId": "usr-owner-1",
+      "details": "Successfully logged into control plane.",
+      "timestamp": "2026-10-01T23:09:50.647Z"
+    },
     {
       "id": "aud-1",
       "actorName": "Alex Mercer",
