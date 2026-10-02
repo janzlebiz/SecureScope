@@ -12,6 +12,7 @@ import { PolicyEngine } from './src/server/services/policyEngine';
 import { NormalizerAndCorrelator } from './src/server/services/normalizer';
 import { ReportGenerator } from './src/server/services/reportGenerator';
 import { AiAdvisor } from './src/server/services/aiAdvisor';
+import { WorkerRunner } from './src/server/services/workerRunner';
 import { SCANNER_REGISTRY } from './src/server/scanners/scannerRegistry';
 import { ZapAdapter, RawFindingOutput } from './src/server/scanners/zapAdapter';
 import { NucleiAdapter } from './src/server/scanners/nucleiAdapter';
@@ -31,6 +32,9 @@ app.use(express.json({ limit: '10mb' }));
 // --- SESSION STORE & ACTIVE SESSIONS (SS-01) ---
 const SESSIONS = new Map<string, string>(); // SessionToken -> UserID
 
+// Secure Single-Use Report Download Tickets Map (SS-01/P2)
+const REPORT_TICKETS = new Map<string, { scanId: string; userId: string; expiresAt: number }>();
+
 // --- AUTHENTICATION & ACCESS CONTROL MIDDLEWARE (SS-01) ---
 function requireAuth(req: any, res: any, next: any) {
   const authHeader = req.headers.authorization;
@@ -38,8 +42,6 @@ function requireAuth(req: any, res: any, next: any) {
 
   if (authHeader && authHeader.startsWith('Bearer ')) {
     token = authHeader.split(' ')[1];
-  } else if (req.query.token) {
-    token = req.query.token as string;
   }
 
   if (!token) {
@@ -159,7 +161,7 @@ app.post('/api/auth/login', (req, res) => {
     return res.status(401).json({ error: 'Invalid email or password.' });
   }
 
-  // Create real session
+  // Create real randomized session (No static credentials)
   const token = `sess-${crypto.randomBytes(16).toString('hex')}`;
   SESSIONS.set(token, user.id);
 
@@ -350,7 +352,7 @@ app.post('/api/scans', requireAuth, requireRole(['OWNER', 'ADMIN', 'ANALYST']), 
       });
     }
 
-    // 2. Queue and Start the scan
+    // 2. Queue and Start the scan (Decoupled execution)
     const scanId = `scn-${crypto.randomBytes(4).toString('hex')}`;
     const now = new Date().toISOString();
 
@@ -362,7 +364,7 @@ app.post('/api/scans', requireAuth, requireRole(['OWNER', 'ADMIN', 'ANALYST']), 
       assetIdentifier: asset.identifier,
       assetType: asset.type,
       profile: validatedData.profile,
-      status: 'RUNNING',
+      status: 'QUEUED', // Begin in QUEUED state (SS-08 Phase 8 decoupled)
       initiatedBy: req.user.id,
       initiatedByName: req.user.name,
       authorizationConfirmedAt: now,
@@ -378,132 +380,13 @@ app.post('/api/scans', requireAuth, requireRole(['OWNER', 'ADMIN', 'ANALYST']), 
     // Respond immediately to the client
     res.status(202).json(newScan);
 
+    // Resolve exact target IP and bind validation strictly to scanner socket (SS-02)
     const boundIp = (decision.ipAddressesResolved && decision.ipAddressesResolved.length > 0)
       ? decision.ipAddressesResolved[0]
       : '127.0.0.1';
-    const boundAsset = { ...asset, resolvedIp: boundIp } as any;
 
-    // Run background scans and append findings safely
-    (async () => {
-      const rawFindings: RawFindingOutput[] = [];
-
-      try {
-        if (boundAsset.type === 'WEB_URL' || boundAsset.type === 'API_ENDPOINT') {
-          // ZAP Adapter Run
-          const zapLogs: string[] = [];
-          const zapRaw = await ZapAdapter.runScan({ scanId, projectId: project.id, asset: boundAsset, profile: validatedData.profile, authorizationStatement: newScan.authorizationStatement }, zapLogs);
-          rawFindings.push(...zapRaw);
-          newScan.jobs.push({
-            id: `job-zap-${scanId}`,
-            scanId,
-            scannerId: ZapAdapter.id,
-            scannerName: ZapAdapter.displayName,
-            status: 'COMPLETED',
-            startedAt: now,
-            completedAt: new Date().toISOString(),
-            findingsCount: zapRaw.length,
-            logs: zapLogs
-          });
-
-          // Nuclei Adapter Run
-          const nucleiLogs: string[] = [];
-          const nucleiRaw = await NucleiAdapter.runScan({ asset: boundAsset, profile: validatedData.profile }, nucleiLogs);
-          rawFindings.push(...nucleiRaw);
-          newScan.jobs.push({
-            id: `job-nuclei-${scanId}`,
-            scanId,
-            scannerId: NucleiAdapter.id,
-            scannerName: NucleiAdapter.displayName,
-            status: 'COMPLETED',
-            startedAt: now,
-            completedAt: new Date().toISOString(),
-            findingsCount: nucleiRaw.length,
-            logs: nucleiLogs
-          });
-        } else if (boundAsset.type === 'MOBILE_PACKAGE') {
-          const mobsfLogs: string[] = [];
-          const mobsfRaw = await MobSFAdapter.runScan({ asset: boundAsset, profile: validatedData.profile }, mobsfLogs);
-          rawFindings.push(...mobsfRaw);
-          newScan.jobs.push({
-            id: `job-mobsf-${scanId}`,
-            scanId,
-            scannerId: MobSFAdapter.id,
-            scannerName: MobSFAdapter.displayName,
-            status: 'COMPLETED',
-            startedAt: now,
-            completedAt: new Date().toISOString(),
-            findingsCount: mobsfRaw.length,
-            logs: mobsfLogs
-          });
-        } else if (boundAsset.type === 'SOURCE_REPO') {
-          const semgrepLogs: string[] = [];
-          const semgrepRaw = await SemgrepAdapter.runScan({ asset: boundAsset, profile: validatedData.profile }, semgrepLogs);
-          rawFindings.push(...semgrepRaw);
-          newScan.jobs.push({
-            id: `job-semgrep-${scanId}`,
-            scanId,
-            scannerId: SemgrepAdapter.id,
-            scannerName: SemgrepAdapter.displayName,
-            status: 'COMPLETED',
-            startedAt: now,
-            completedAt: new Date().toISOString(),
-            findingsCount: semgrepRaw.length,
-            logs: semgrepLogs
-          });
-
-          const trivyLogs: string[] = [];
-          const trivyRaw = await TrivyAdapter.runScan({ asset: boundAsset, profile: validatedData.profile }, trivyLogs);
-          rawFindings.push(...trivyRaw);
-          newScan.jobs.push({
-            id: `job-trivy-${scanId}`,
-            scanId,
-            scannerId: TrivyAdapter.id,
-            scannerName: TrivyAdapter.displayName,
-            status: 'COMPLETED',
-            startedAt: now,
-            completedAt: new Date().toISOString(),
-            findingsCount: trivyRaw.length,
-            logs: trivyLogs
-          });
-        }
-
-        // Correlate, Deduplicate, Normalize (with Zod validation in normalizer)
-        const normalized = NormalizerAndCorrelator.correlateFindings(
-          scanId,
-          project.id,
-          asset.id,
-          asset.identifier,
-          rawFindings
-        );
-
-        // Persistent save of normalized findings
-        for (const f of normalized) {
-          DbStore.addFinding(f);
-        }
-
-        // Complete the scan state
-        newScan.status = 'COMPLETED';
-        newScan.completedAt = new Date().toISOString();
-        newScan.durationSeconds = Math.round((new Date(newScan.completedAt).getTime() - new Date(newScan.startedAt).getTime()) / 1000);
-        newScan.findingsSummary = {
-          critical: normalized.filter((f) => f.severity === 'CRITICAL').length,
-          high: normalized.filter((f) => f.severity === 'HIGH').length,
-          medium: normalized.filter((f) => f.severity === 'MEDIUM').length,
-          low: normalized.filter((f) => f.severity === 'LOW').length,
-          info: normalized.filter((f) => f.severity === 'INFO').length,
-          total: normalized.length
-        };
-
-        DbStore.updateScan(newScan);
-        DbStore.addAuditLog(createAuditEvent(req.user, 'SCAN_COMPLETED', 'SCAN', scanId, `Scan completed. Total normalized findings: ${normalized.length}`));
-
-      } catch (bgError) {
-        console.error('[Scan Background] Execution crash:', bgError);
-        newScan.status = 'FAILED';
-        newScan.completedAt = new Date().toISOString();
-        DbStore.updateScan(newScan);
-      }
-    })();
+    // Offload executing loop onto decoupled background isolated worker thread (SS-08 Phase 8)
+    WorkerRunner.enqueueScan(scanId, project.id, asset.id, boundIp);
 
   } catch (err: any) {
     if (err instanceof z.ZodError) {
@@ -641,15 +524,54 @@ app.post('/api/ai/generate-executive-summary', requireAuth, requireRole(['OWNER'
   }
 });
 
-// Report Export Gate
-app.post('/api/reports/generate', requireAuth, (req: any, res) => {
-  const { scanId, format } = req.body;
+// Secure Single-Use Report Ticket Endpoint (Remediates P2 token-in-url)
+app.post('/api/reports/tickets', requireAuth, (req: any, res) => {
+  const { scanId } = req.body;
+  if (!scanId) {
+    return res.status(400).json({ error: 'Scan ID is required.' });
+  }
+
   const scan = DbStore.getScans().find((s) => s.id === scanId);
   if (!scan) return res.status(404).json({ error: 'Scan not found.' });
 
   if (!isUserAuthorizedForProject(req.user, scan.projectId)) {
-    return res.status(404).json({ error: 'Scan not found.' });
+    return res.status(403).json({ error: 'Forbidden: Access to requested scan is denied.' });
   }
+
+  // Generate high-entropy ticket valid for 60 seconds
+  const ticket = `tkt-${crypto.randomBytes(32).toString('hex')}`;
+  REPORT_TICKETS.set(ticket, {
+    scanId,
+    userId: req.user.id,
+    expiresAt: Date.now() + 60000
+  });
+
+  res.json({ ticket });
+});
+
+// Consume Ticket and Export Report Endpoint (Single-Use, SS-01/P2)
+app.get('/api/reports/generate', (req, res) => {
+  const ticketToken = req.query.ticket as string;
+  const format = req.query.format as string || 'HTML';
+
+  if (!ticketToken) {
+    return res.status(401).json({ error: 'Unauthorized: Missing single-use download ticket.' });
+  }
+
+  const ticketData = REPORT_TICKETS.get(ticketToken);
+  if (!ticketData) {
+    return res.status(401).json({ error: 'Unauthorized: Invalid or expired single-use ticket.' });
+  }
+
+  // Enforce absolute single-use: Delete the ticket immediately upon lookup!
+  REPORT_TICKETS.delete(ticketToken);
+
+  if (Date.now() > ticketData.expiresAt) {
+    return res.status(410).json({ error: 'Gone: The download ticket has expired.' });
+  }
+
+  const scan = DbStore.getScans().find((s) => s.id === ticketData.scanId);
+  if (!scan) return res.status(404).json({ error: 'Scan not found.' });
 
   const project = DbStore.getProjectById(scan.projectId) || DbStore.getProjects()[0];
   const scanFindings = DbStore.getFindings().filter((f) => f.scanId === scan.id);
@@ -659,17 +581,17 @@ app.post('/api/reports/generate', requireAuth, (req: any, res) => {
   if (format === 'CSV') {
     const csv = ReportGenerator.exportCsvReport(scanFindings);
     res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', `attachment; filename="securescope-report-${scanId}.csv"`);
+    res.setHeader('Content-Disposition', `attachment; filename="securescope-report-${ticketData.scanId}.csv"`);
     return res.send(csv);
   }
 
   if (format === 'JSON') {
     res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Content-Disposition', `attachment; filename="securescope-report-${scanId}.json"`);
+    res.setHeader('Content-Disposition', `attachment; filename="securescope-report-${ticketData.scanId}.json"`);
     return res.json(model);
   }
 
-  // HTML Report
+  // Default HTML Report
   const html = ReportGenerator.exportHtmlReport(model);
   res.setHeader('Content-Type', 'text/html');
   res.send(html);

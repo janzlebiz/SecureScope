@@ -12,18 +12,44 @@ interface ReportsViewProps {
 export const ReportsView: React.FC<ReportsViewProps> = ({ scans, projects, findings, activeToken }) => {
   const [selectedScanId, setSelectedScanId] = useState<string>(scans[0]?.id || '');
   const [reportFormat, setReportFormat] = useState<'HTML' | 'JSON' | 'CSV'>('HTML');
+  const [exporting, setExporting] = useState<boolean>(false);
 
   const selectedScan = scans.find((s) => s.id === selectedScanId);
   const scanFindings = findings.filter((f) => f.scanId === selectedScanId);
 
-  const handleExport = () => {
-    if (!selectedScanId) return;
+  const handleExport = async () => {
+    if (!selectedScanId || exporting) return;
+    setExporting(true);
 
-    const url = `/api/reports/generate?scanId=${selectedScanId}&format=${reportFormat}&token=${activeToken}`;
-    if (reportFormat === 'HTML') {
-      window.open(url, '_blank');
-    } else {
-      window.location.href = url;
+    try {
+      // 1. Request a short-lived single-use download ticket securely via POST (SS-01/P2)
+      const res = await fetch('/api/reports/tickets', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${activeToken}`
+        },
+        body: JSON.stringify({ scanId: selectedScanId })
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to acquire secure report ticket.');
+      }
+
+      const { ticket } = await res.json();
+
+      // 2. Navigate to secure GET endpoint with single-use ticket (No persistent credentials leaked!)
+      const url = `/api/reports/generate?ticket=${ticket}&format=${reportFormat}`;
+      if (reportFormat === 'HTML') {
+        window.open(url, '_blank');
+      } else {
+        window.location.href = url;
+      }
+    } catch (err) {
+      console.error('[Reports Export] Error:', err);
+      alert('Secure report generation failed. Verify you have active privileges.');
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -56,11 +82,15 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ scans, projects, findi
               onChange={(e) => setSelectedScanId(e.target.value)}
               className="w-full bg-slate-950 border border-slate-800 text-slate-200 text-xs rounded-lg p-2.5 focus:outline-none focus:border-sky-500 font-mono"
             >
-              {scans.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.assetName} ({s.profile}) &bull; {new Date(s.startedAt).toLocaleDateString()}
-                </option>
-              ))}
+              {scans.length > 0 ? (
+                scans.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.assetName} ({s.profile}) &bull; {new Date(s.startedAt).toLocaleDateString()}
+                  </option>
+                ))
+              ) : (
+                <option value="">No completed scans found</option>
+              )}
             </select>
           </div>
 
@@ -118,11 +148,11 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ scans, projects, findi
 
           <button
             onClick={handleExport}
-            disabled={!selectedScanId}
-            className="w-full py-2.5 bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs rounded-lg transition-colors font-mono flex items-center justify-center gap-2 shadow-sm shadow-sky-950/50"
+            disabled={!selectedScanId || exporting}
+            className="w-full py-2.5 bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs rounded-lg transition-colors font-mono flex items-center justify-center gap-2 shadow-sm shadow-sky-950/50 disabled:opacity-50"
           >
             <Download className="w-4 h-4" />
-            <span>EXPORT {reportFormat} REPORT</span>
+            <span>{exporting ? 'GENERATING Artifact...' : `EXPORT ${reportFormat} REPORT`}</span>
           </button>
         </div>
       </div>

@@ -63,8 +63,6 @@ export class DbStore {
   private static data: DatabaseSchema | null = null;
 
   private static load() {
-    if (this.data) return;
-
     if (fs.existsSync(DB_FILE)) {
       try {
         const raw = fs.readFileSync(DB_FILE, 'utf8');
